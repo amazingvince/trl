@@ -599,7 +599,8 @@ class ORPOTrainer(Trainer):
         policy_chosen_logps: torch.FloatTensor,
         policy_rejected_logps: torch.FloatTensor,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
-        """Compute ORPO's odds ratio (OR) loss for a batch of policy and reference model log probabilities.
+
+        """Compute the SimPO loss for a batch of policy model log probabilities.
 
         Args:
             policy_chosen_logps: Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
@@ -607,24 +608,34 @@ class ORPOTrainer(Trainer):
 
         Returns:
             A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
-            The losses tensor contains the ORPO loss for each example in the batch.
+            The losses tensor contains the SimPO loss for each example in the batch.
             The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
-            The log odds ratio of the chosen responses over the rejected responses ratio for logging purposes.
-            The `log(sigmoid(log_odds_chosen))` for logging purposes.
         """
+        pi_logratios = policy_chosen_logps - policy_rejected_logps
+        gamma_logratios = self.gamma / self.beta 
+        pi_logratios = pi_logratios.to(self.accelerator.device)
+        logits = pi_logratios - gamma_logratios
+        self.loss_type = "sigmoid"
+        self.beta = 2.0
+        self.gamma = 1.6
 
-        # Derived from Eqs. (4) and (7) from https://arxiv.org/abs/2403.07691 by using log identities and exp(log(P(y|x)) = P(y|x)
-        log_odds = (policy_chosen_logps - policy_rejected_logps) - (
-            torch.log1p(-torch.exp(policy_chosen_logps)) - torch.log1p(-torch.exp(policy_rejected_logps))
-        )
-        sig_ratio = F.sigmoid(log_odds)
-        ratio = torch.log(sig_ratio)
-        losses = self.beta * ratio
+        if self.loss_type == "sigmoid":
+            losses = (
+                -F.logsigmoid(self.beta * logits) * (1 - self.label_smoothing)
+                - F.logsigmoid(-self.beta * logits) * self.label_smoothing
+            )
+        elif self.loss_type == "hinge":
+            losses = torch.relu(1 - self.beta * logits)
+        else:
+            raise ValueError(
+                f"Unknown loss type: {self.loss_type}. Should be one of ['sigmoid', 'hinge']"
+            )
 
-        chosen_rewards = self.beta * (policy_chosen_logps.to(self.accelerator.device)).detach()
-        rejected_rewards = self.beta * (policy_rejected_logps.to(self.accelerator.device)).detach()
+        chosen_rewards = self.beta * policy_chosen_logps.to(self.accelerator.device).detach()
+        rejected_rewards = self.beta * policy_rejected_logps.to(self.accelerator.device).detach()
 
-        return losses, chosen_rewards, rejected_rewards, torch.mean(ratio).item(), torch.mean(log_odds).item()
+
+        return losses, chosen_rewards, rejected_rewards, torch.mean(gamma_logratios).item(), torch.mean(pi_logratios).item()
 
     @staticmethod
     def get_batch_logps(
