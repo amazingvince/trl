@@ -611,13 +611,15 @@ class ORPOTrainer(Trainer):
             The losses tensor contains the SimPO loss for each example in the batch.
             The chosen_rewards and rejected_rewards tensors contain the rewards for the chosen and rejected responses, respectively.
         """
+
+        self.beta = 2.0
+        self.gamma = 1.6
         pi_logratios = policy_chosen_logps - policy_rejected_logps
         gamma_logratios = self.gamma / self.beta 
         pi_logratios = pi_logratios.to(self.accelerator.device)
         logits = pi_logratios - gamma_logratios
         self.loss_type = "sigmoid"
-        self.beta = 2.0
-        self.gamma = 1.6
+
 
         if self.loss_type == "sigmoid":
             losses = (
