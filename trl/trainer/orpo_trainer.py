@@ -637,7 +637,7 @@ class ORPOTrainer(Trainer):
         rejected_rewards = self.beta * policy_rejected_logps.to(self.accelerator.device).detach()
 
 
-        return losses, chosen_rewards, rejected_rewards, torch.mean(gamma_logratios).item(), torch.mean(pi_logratios).item()
+        return losses, chosen_rewards, rejected_rewards, 0, 0
 
     @staticmethod
     def get_batch_logps(
