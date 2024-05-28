@@ -614,6 +614,7 @@ class ORPOTrainer(Trainer):
 
         self.beta = 2.0
         self.gamma = 1.6
+        self.label_smoothing_factor = 0.0
         pi_logratios = policy_chosen_logps - policy_rejected_logps
         gamma_logratios = self.gamma / self.beta 
         pi_logratios = pi_logratios.to(self.accelerator.device)
