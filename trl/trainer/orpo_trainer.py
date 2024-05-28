@@ -625,7 +625,7 @@ class ORPOTrainer(Trainer):
         if self.loss_type == "sigmoid":
             losses = (
                 - F.logsigmoid(self.beta * logits) * (1 - self.label_smoothing_factor)
-                - F.logsigmoid(-self.beta * logits) * self.Nonelabel_smoothing_factor)
+                - F.logsigmoid(-self.beta * logits) * self.label_smoothing_factor)
         elif self.loss_type == "hinge":
             losses = torch.relu(1 - self.beta * logits)
         else:
